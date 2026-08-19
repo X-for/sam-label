@@ -1,0 +1,14 @@
+{
+  "server": "http://192.168.110.101:8002",
+  "created_at": "2026-08-18",
+  "output_format": "yolo",
+  "task_type": "detect",
+  "confidence": 0.85,
+  "jobs": {
+    "t1": "9abac500-51e8-4793-85de-7f06cdb5420b",
+    "t2": "e578bea7-b519-41ff-b82f-7177d9218354",
+    "t3": "b30ebaa7-9603-4f14-8f07-4a94b7f74bcd",
+    "t4": "f3f826e7-a0a1-4763-826f-80394e9a8b2a",
+    "t5": "fc72cca3-9bb1-495c-8324-10a29fab3ae1"
+  }
+}

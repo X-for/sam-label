@@ -1,0 +1,11 @@
+fastapi>=0.116,<1
+uvicorn[standard]>=0.35,<1
+python-multipart>=0.0.20,<1
+aiofiles>=24.1,<26
+git+https://github.com/ultralytics/CLIP.git
+numpy>=1.26,<2
+pydantic-settings>=2.10,<3
+timm>=1.0.17,<2
+torch==2.6.0
+torchvision==0.21.0
+ultralytics>=8.3.237,<9

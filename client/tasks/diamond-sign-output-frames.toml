@@ -1,0 +1,33 @@
+[client]
+server = "http://192.168.110.101:8000"
+inputs = ['C:\Program Files\feiq\Recv Files\output_frames']
+recursive = true
+batch_size = 8
+poll_interval = 5.0
+wait_timeout = 86400.0
+request_timeout = 600.0
+output_dir = "../../results/diamond-sign-output-frames"
+no_wait = false
+no_download = false
+dry_run = false
+
+[task]
+task_type = "detect"
+output_format = "yolo"
+client_reference = "diamond-sign-output-frames-20260818"
+aggregation = "deduplicate"
+merge_iou = 0.7
+
+[task.prediction]
+conf = 0.35
+iou = 0.7
+imgsz = 644
+max_det = 100
+retina_masks = false
+
+[task.labels]
+diamond_sign = [
+  "diamond-shaped hazardous materials placard",
+  "hazardous materials diamond placard",
+  "diamond-shaped warning sign",
+]

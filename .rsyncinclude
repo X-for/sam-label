@@ -1,0 +1,25 @@
+# Use with: rsync -azP --delete --filter="merge .rsyncinclude" ./ user@server:/opt/sam-label/
+# Rules are evaluated top-to-bottom. Everything not explicitly listed is excluded.
+
++ /.rsyncinclude
++ /.env.example
++ /.python-version
++ /pyproject.toml
++ /README.md
++ /Dockerfile
++ /.dockerignore
++ /requirements.txt
++ /requirements-dev.txt
+
++ /code/
++ /code/***
++ /client/
++ /client/***
++ /tests/
++ /tests/***
++ /pytest.ini
+
++ /models/
++ /models/sam3.pt
+
+- *

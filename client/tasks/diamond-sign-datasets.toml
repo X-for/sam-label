@@ -1,0 +1,34 @@
+[client]
+server = "http://192.168.110.101:8002"
+# This default can be replaced by a positional input on the command line.
+inputs = ["../../datasets/t1/images"]
+recursive = true
+batch_size = 8
+poll_interval = 5.0
+wait_timeout = 86400.0
+request_timeout = 600.0
+output_dir = "../../results/diamond-sign-datasets"
+no_wait = false
+no_download = false
+dry_run = false
+
+[task]
+task_type = "detect"
+output_format = "yolo"
+client_reference = "diamond-sign-filtered-datasets-20260818"
+aggregation = "deduplicate"
+merge_iou = 0.7
+
+[task.prediction]
+conf = 0.85
+iou = 0.7
+imgsz = 644
+max_det = 20
+retina_masks = false
+
+[task.labels]
+diamond_sign = [
+  "diamond-shaped hazardous materials placard",
+  "hazardous materials diamond placard",
+  "diamond-shaped warning sign",
+]

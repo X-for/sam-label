@@ -1,0 +1,21 @@
+{
+  "task_type": "segment",
+  "output_format": "yolo",
+  "client_reference": "batch-prelabel-example",
+  "prediction": {
+    "conf": 0.5,
+    "iou": 0.7,
+    "imgsz": 644,
+    "max_det": 300,
+    "retina_masks": true
+  },
+  "prompt_groups": [
+    {
+      "label": "person",
+      "class_id": 0,
+      "prompts": ["person", "sleeping person"],
+      "aggregation": "deduplicate",
+      "merge_iou": 0.7
+    }
+  ]
+}

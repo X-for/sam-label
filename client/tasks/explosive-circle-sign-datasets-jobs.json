@@ -1,0 +1,20 @@
+{
+  "server": "http://192.168.110.101:8002",
+  "created_at": "2026-08-18",
+  "source_images": 1348,
+  "output_format": "coco",
+  "task_type": "segment",
+  "post_filter": {
+    "minimum_score": 0.25,
+    "minimum_fill_ratio": 0.70,
+    "minimum_prompt_votes": 2
+  },
+  "jobs": {
+    "t1": "c956bed3-3a76-4e53-83a3-4b8a20fcce23",
+    "t2": "7bc2e479-3577-4449-adea-52611bd274ef",
+    "t3": "91f56de7-5edf-4883-ab3f-49787dc4037f",
+    "t4": "e6a03eca-a0e5-46a0-beae-d7398aec614b",
+    "t5": "c3b61272-417f-4a60-b51d-7cfd45ded1ad",
+    "t6": "7c99b209-90d3-4aa2-ade6-2a2382cfb1a2"
+  }
+}

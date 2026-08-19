@@ -15,7 +15,8 @@ class JobWorker:
         self.queue: asyncio.Queue[str | None] = asyncio.Queue()
 
     async def enqueue(self, job_id: str) -> None:
-        await self.queue.put(job_id)
+        self.runtime.queue_became_active()
+        self.queue.put_nowait(job_id)
 
     async def run(self) -> None:
         while True:
@@ -26,6 +27,8 @@ class JobWorker:
                 await self._process(job_id)
             finally:
                 self.queue.task_done()
+                if job_id is not None and self.queue.empty():
+                    self.runtime.queue_became_idle()
 
     async def _process(self, job_id: str) -> None:
         job = await self.store.get(job_id)

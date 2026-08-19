@@ -128,6 +128,12 @@ SAM3_API_KEY=
 | `SAM3_UPLOAD_CHUNK_BYTES` | 上传流的读取块大小，默认 1 MiB |
 | `SAM3_API_KEY` | 可选 API 密钥；设置后客户端需发送 `X-API-Key` |
 
+模型生命周期：
+
+- `on_demand`：服务启动、创建任务和上传图片时均不加载模型；任务进入执行队列后才加载。队列完全清空后开始计算空闲时间，达到 `SAM3_IDLE_UNLOAD_SECONDS` 后卸载。
+- `resident`：服务启动时预热模型，并持续驻留显存。
+- `per_job`：任务进入执行队列后加载，并在每个任务推理结束后立即卸载。
+
 ### 3. 启动服务
 
 ```bash

@@ -9,7 +9,7 @@ from sam_api.schemas import Annotation, ImageResult, JobResult
 
 
 async def fake_prewarm(self):
-    return None
+    raise AssertionError("creating or uploading a job must not prewarm the model")
 
 
 async def fake_close(self):

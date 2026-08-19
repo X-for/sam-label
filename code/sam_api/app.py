@@ -155,7 +155,6 @@ async def model_status(request: Request) -> ModelStatus:
 async def create_job(payload: JobCreate, request: Request) -> JobView:
     svc = services(request)
     record = await svc.store.create(payload)
-    asyncio.create_task(svc.runtime.prewarm(), name=f"sam3-prewarm-{record.id}")
     return JobView.from_record(record)
 
 
@@ -209,7 +208,6 @@ async def predict_one_shot(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     svc = services(request)
     record = await svc.store.create(payload)
-    asyncio.create_task(svc.runtime.prewarm(), name=f"sam3-prewarm-{record.id}")
     await save_uploads(record.id, files, svc)
     record = await svc.store.set_status(record.id, JobStatus.QUEUED)
     await svc.worker.enqueue(record.id)

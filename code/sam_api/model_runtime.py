@@ -22,6 +22,7 @@ class Sam3Runtime:
         self._lock = asyncio.Lock()
         self._loading = False
         self._last_used = time.monotonic()
+        self._queue_idle = True
         self._last_error: str | None = None
         # CUDA and the stateful Ultralytics predictor always run on the same
         # dedicated OS thread. The asyncio lock additionally prevents overlap.
@@ -56,13 +57,29 @@ class Sam3Runtime:
                 if self.settings.lifecycle == "per_job":
                     await self._unload_locked()
 
+    def queue_became_active(self) -> None:
+        self._queue_idle = False
+
+    def queue_became_idle(self) -> None:
+        self._queue_idle = True
+        # The idle timeout starts only after the last queued job, including its
+        # export work, has completed.
+        self._last_used = time.monotonic()
+
     async def maybe_unload_idle(self) -> None:
-        if self.settings.lifecycle == "resident" or self._predictor is None:
+        if (
+            self.settings.lifecycle == "resident"
+            or self._predictor is None
+            or not self._queue_idle
+        ):
             return
         if time.monotonic() - self._last_used < self.settings.idle_unload_seconds:
             return
         async with self._lock:
-            if time.monotonic() - self._last_used >= self.settings.idle_unload_seconds:
+            if (
+                self._queue_idle
+                and time.monotonic() - self._last_used >= self.settings.idle_unload_seconds
+            ):
                 await self._unload_locked()
 
     async def close(self) -> None:

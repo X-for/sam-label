@@ -88,13 +88,21 @@ def export_coco(result: JobResult, config: JobCreate, result_dir: Path) -> Path:
     return path
 
 
-def _normalized_bbox(annotation: Annotation, width: int, height: int) -> list[float]:
+def _normalized_bbox(annotation: Annotation, width: int, height: int) -> list[float] | None:
     x, y, box_width, box_height = annotation.bbox
+    x1 = min(float(width), max(0.0, x))
+    y1 = min(float(height), max(0.0, y))
+    x2 = min(float(width), max(0.0, x + box_width))
+    y2 = min(float(height), max(0.0, y + box_height))
+    clipped_width = x2 - x1
+    clipped_height = y2 - y1
+    if clipped_width <= 0.0 or clipped_height <= 0.0:
+        return None
     return [
-        (x + box_width / 2.0) / width,
-        (y + box_height / 2.0) / height,
-        box_width / width,
-        box_height / height,
+        (x1 + clipped_width / 2.0) / width,
+        (y1 + clipped_height / 2.0) / height,
+        clipped_width / width,
+        clipped_height / height,
     ]
 
 
@@ -120,6 +128,8 @@ def export_yolo(result: JobResult, config: JobCreate, result_dir: Path) -> Path:
             class_id = ids[annotation.label]
             if config.task_type == TaskType.DETECT:
                 coordinates = _normalized_bbox(annotation, image.width, image.height)
+                if coordinates is None:
+                    continue
                 lines.append(f"{class_id} " + " ".join(_format_number(value) for value in coordinates))
             else:
                 for polygon in annotation.segmentation or []:

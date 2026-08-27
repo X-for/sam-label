@@ -55,3 +55,34 @@ def test_yolo_detect_export(tmp_path):
         label = archive.read("labels/sample.txt").decode()
         assert label == "0 0.200000 0.200000 0.200000 0.200000\n"
         assert "manifest.json" in archive.namelist()
+
+
+def test_yolo_detect_export_clips_box_to_image_boundaries(tmp_path):
+    result = sample_result(TaskType.DETECT)
+    result.images[0].annotations[0].bbox = [95, -5, 10, 20]
+    config = JobCreate(
+        task_type="detect",
+        output_format="yolo",
+        prompt_groups=[PromptGroup(label="car", prompts=["car"])],
+    )
+
+    path = export_result(result, config, tmp_path)
+
+    with zipfile.ZipFile(path) as archive:
+        label = archive.read("labels/sample.txt").decode()
+    assert label == "0 0.975000 0.150000 0.050000 0.300000\n"
+
+
+def test_yolo_detect_export_skips_box_outside_image(tmp_path):
+    result = sample_result(TaskType.DETECT)
+    result.images[0].annotations[0].bbox = [105, 5, 10, 20]
+    config = JobCreate(
+        task_type="detect",
+        output_format="yolo",
+        prompt_groups=[PromptGroup(label="car", prompts=["car"])],
+    )
+
+    path = export_result(result, config, tmp_path)
+
+    with zipfile.ZipFile(path) as archive:
+        assert archive.read("labels/sample.txt") == b""

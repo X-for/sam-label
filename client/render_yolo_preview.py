@@ -31,6 +31,17 @@ def find_image(images_dir: Path, stem: str) -> Path:
     return matches[0]
 
 
+def positive_label_paths(labels_dir: Path) -> list[Path]:
+    return sorted(
+        (
+            path
+            for path in labels_dir.glob("*.txt")
+            if path.name.casefold() != "classes.txt" and path.stat().st_size
+        ),
+        key=lambda path: path.name.casefold(),
+    )
+
+
 def draw_preview(image_path: Path, label_path: Path, caption: str) -> Image.Image:
     image = Image.open(image_path).convert("RGB")
     draw = ImageDraw.Draw(image)
@@ -61,10 +72,7 @@ def main() -> int:
         images_dir = dataset_dir / "images"
         if not labels_dir.is_dir() or not images_dir.is_dir():
             continue
-        positives = sorted(
-            (path for path in labels_dir.glob("*.txt") if path.stat().st_size),
-            key=lambda path: path.name.casefold(),
-        )
+        positives = positive_label_paths(labels_dir)
         for index, label_path in enumerate(evenly_spaced(positives, args.samples_per_set), start=1):
             image_path = find_image(images_dir, label_path.stem)
             tiles.append(draw_preview(image_path, label_path, f"{dataset_dir.name} sample {index}"))

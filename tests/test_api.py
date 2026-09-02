@@ -55,6 +55,20 @@ def wait_for_success(client, job_id):
     raise AssertionError("job did not complete")
 
 
+def test_web_ui_is_served(monkeypatch, tmp_path):
+    monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Sam3Runtime, "close", fake_close)
+
+    with TestClient(app) as client:
+        response = client.get("/ui")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "SAM3 预标注控制台" in response.text
+    assert "/v1/jobs" in response.text
+    assert "/progress" in response.text
+
+
 def test_create_upload_commit_and_download_coco(monkeypatch, tmp_path):
     monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(Sam3Runtime, "prewarm", fake_prewarm)

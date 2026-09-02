@@ -19,6 +19,7 @@ from .store import JobStore
 from .worker import JobWorker
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp", "image/tiff"}
+UI_PATH = Path(__file__).with_name("static") / "index.html"
 
 
 class Services:
@@ -88,6 +89,11 @@ def require_job(record):
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
     return record
+
+
+@app.get("/ui", include_in_schema=False)
+async def web_ui() -> FileResponse:
+    return FileResponse(UI_PATH, media_type="text/html")
 
 
 async def save_uploads(job_id: str, files: list[UploadFile], svc: Services) -> JobView:

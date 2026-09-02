@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SAM3 预标注控制台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7f5;
+      --panel: #ffffff;
+      --ink: #17231d;
+      --muted: #65736b;
+      --line: #dce5df;
+      --brand: #147d55;
+      --brand-dark: #0d5e3f;
+      --soft: #e8f5ee;
+      --danger: #b63d3d;
+      --warning: #a56a00;
+      --shadow: 0 18px 50px rgba(26, 62, 44, .08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at top left, rgba(20, 125, 85, .12), transparent 34rem),
+        var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 64px; }
+    header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -.04em; }
+    h1 span { color: var(--brand); }
+    header p { margin: 10px 0 0; color: var(--muted); }
+    .model-card { min-width: 250px; padding: 15px 17px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.76); }
+    .model-card strong { display: block; margin-bottom: 4px; }
+    .model-detail { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+    .dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: #9aa79f; }
+    .dot.online { background: #19a66c; box-shadow: 0 0 0 4px rgba(25,166,108,.13); }
+    .grid { display: grid; grid-template-columns: minmax(300px, 390px) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
+    .panel-head h2 { margin: 0; font-size: 18px; }
+    .panel-body { padding: 20px 22px 23px; }
+    label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 650; }
+    .field { margin-bottom: 15px; }
+    .field small { display: block; color: var(--muted); margin-top: 5px; }
+    input, select, textarea {
+      width: 100%; border: 1px solid #cfdad3; border-radius: 10px; background: #fbfdfc; color: var(--ink); padding: 10px 11px; outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(20,125,85,.1); }
+    textarea { min-height: 96px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .compact { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .check { display: flex; align-items: center; gap: 9px; font-weight: 500; }
+    .check input { width: auto; }
+    .button {
+      border: 0; border-radius: 10px; padding: 10px 15px; background: var(--brand); color: white; font-weight: 700;
+    }
+    .button:hover { background: var(--brand-dark); }
+    .button:disabled { opacity: .55; cursor: wait; }
+    .button.secondary { color: var(--brand-dark); background: var(--soft); }
+    .button.danger { color: var(--danger); background: #fff0f0; }
+    .button.small { padding: 6px 10px; font-size: 13px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .submit { width: 100%; padding: 12px; }
+    .toolbar { display: flex; align-items: center; gap: 9px; }
+    .toolbar select { width: auto; min-width: 126px; padding: 7px 9px; }
+    .table-wrap { overflow-x: auto; padding: 14px 0 4px; }
+    table { width: 100%; border-collapse: collapse; min-width: 690px; }
+    th, td { padding: 12px 14px; border-top: 1px solid var(--line); text-align: left; vertical-align: middle; }
+    th { color: var(--muted); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+    td { font-size: 13px; }
+    .job-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+    .status { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 8px; background: #eef2ef; font-size: 12px; font-weight: 700; }
+    .status.running, .status.queued { color: var(--warning); background: #fff6de; }
+    .status.succeeded { color: var(--brand-dark); background: var(--soft); }
+    .status.failed { color: var(--danger); background: #fff0f0; }
+    .progress { width: 120px; height: 7px; overflow: hidden; border-radius: 99px; background: #e5ebe7; margin-bottom: 4px; }
+    .progress span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
+    .empty { padding: 48px 20px; color: var(--muted); text-align: center; }
+    .notice { min-height: 22px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .notice.error { color: var(--danger); }
+    .api-key { display: flex; gap: 8px; }
+    .api-key input { min-width: 150px; }
+    #toast { position: fixed; right: 20px; bottom: 20px; max-width: min(420px, calc(100% - 40px)); padding: 12px 16px; border-radius: 11px; color: white; background: #26352d; box-shadow: var(--shadow); opacity: 0; transform: translateY(12px); pointer-events: none; transition: .2s; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.error { background: var(--danger); }
+    @media (max-width: 850px) {
+      header { flex-direction: column; }
+      .model-card { width: 100%; }
+      .grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .shell { width: min(100% - 20px, 1180px); padding-top: 22px; }
+      .row, .compact { grid-template-columns: 1fr; }
+      .panel-head { align-items: flex-start; flex-direction: column; }
+      .toolbar { width: 100%; }
+      .toolbar select { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>SAM3 <span>预标注控制台</span></h1>
+        <p>创建任务、查看推理进度并管理标注结果。</p>
+      </div>
+      <div class="model-card">
+        <strong><span id="model-dot" class="dot"></span><span id="model-title">正在连接服务</span></strong>
+        <div id="model-detail" class="model-detail">等待模型状态…</div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="panel-head"><h2>新建预标注任务</h2></div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="api-key">API Key（可选）</label>
+            <div class="api-key"><input id="api-key" type="password" autocomplete="off" placeholder="仅保存在当前页面内存"><button id="apply-key" class="button secondary" type="button">应用</button></div>
+          </div>
+          <form id="job-form">
+            <div class="field"><label for="reference">任务备注</label><input id="reference" maxlength="256" placeholder="例如：camera-a-2026-09"></div>
+            <div class="row">
+              <div class="field"><label for="task-type">任务类型</label><select id="task-type"><option value="detect">目标检测</option><option value="segment" selected>实例分割</option><option value="semantic">语义分割</option></select></div>
+              <div class="field"><label for="output-format">输出格式</label><select id="output-format"><option value="yolo">YOLO</option><option value="coco">COCO</option></select></div>
+            </div>
+            <div class="field">
+              <label for="labels">标签和提示词</label>
+              <textarea id="labels" required placeholder="每行一个标签，多个 prompt 用 | 分隔">car=car|automobile</textarea>
+              <small>格式：标签=prompt1|prompt2，class_id 按行从 0 分配。</small>
+            </div>
+            <div class="row">
+              <div class="field"><label for="aggregation">聚合策略</label><select id="aggregation"><option value="deduplicate">deduplicate</option><option value="keep_all">keep_all</option><option value="best">best</option><option value="union">union</option></select></div>
+              <div class="field"><label for="merge-iou">合并 IoU</label><input id="merge-iou" type="number" min="0" max="1" step="0.05" value="0.7"></div>
+            </div>
+            <div class="compact">
+              <div class="field"><label for="conf">置信度</label><input id="conf" type="number" min="0" max="1" step="0.05" value="0.25"></div>
+              <div class="field"><label for="iou">NMS IoU</label><input id="iou" type="number" min="0" max="1" step="0.05" value="0.7"></div>
+              <div class="field"><label for="imgsz">推理尺寸</label><input id="imgsz" type="number" min="70" max="4096" step="14" value="644"></div>
+            </div>
+            <div class="row">
+              <div class="field"><label for="max-det">最大检测数</label><input id="max-det" type="number" min="1" max="5000" value="300"></div>
+              <div class="field"><label class="check" for="retina"><input id="retina" type="checkbox" checked>高分辨率 Mask</label></div>
+            </div>
+            <div class="field"><label for="files">选择图片</label><input id="files" type="file" accept="image/*" multiple></div>
+            <div class="field"><label for="directory">或者选择图片目录</label><input id="directory" type="file" accept="image/*" multiple webkitdirectory><small>会递归选择目录中的图片；当前 API 不保留子目录结构。</small></div>
+            <button id="submit-job" class="button submit" type="submit">创建并提交任务</button>
+            <div id="submit-notice" class="notice" aria-live="polite"></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div><h2>任务列表</h2><div id="job-summary" class="model-detail">正在读取…</div></div>
+          <div class="toolbar"><select id="status-filter"><option value="">全部状态</option><option value="uploading">uploading</option><option value="queued">queued</option><option value="running">running</option><option value="succeeded">succeeded</option><option value="failed">failed</option></select><button id="refresh" class="button secondary small" type="button">刷新</button></div>
+        </div>
+        <div id="jobs" class="table-wrap"><div class="empty">正在加载任务列表…</div></div>
+      </section>
+    </div>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const state = { apiKey: "", refreshing: false };
+    const imagePattern = /\.(jpe?g|png|webp|bmp|tiff?)$/i;
+    const byId = (id) => document.getElementById(id);
+
+    function notify(message, error = false) {
+      const toast = byId("toast");
+      toast.textContent = message;
+      toast.className = error ? "show error" : "show";
+      clearTimeout(notify.timer);
+      notify.timer = setTimeout(() => { toast.className = ""; }, 3200);
+    }
+
+    async function api(path, options = {}) {
+      const headers = new Headers(options.headers || {});
+      if (state.apiKey) headers.set("X-API-Key", state.apiKey);
+      const response = await fetch(path, { ...options, headers });
+      if (!response.ok) {
+        let detail = `${response.status} ${response.statusText}`;
+        try {
+          const payload = await response.json();
+          detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail || payload);
+        } catch (_) {}
+        throw new Error(detail);
+      }
+      if (response.status === 204) return null;
+      return response;
+    }
+
+    async function refreshModel() {
+      try {
+        const response = await api("/v1/model");
+        const model = await response.json();
+        byId("model-dot").className = `dot ${model.loaded ? "online" : ""}`;
+        byId("model-title").textContent = model.loading ? "模型加载中" : model.loaded ? "模型已加载" : "模型未加载";
+        byId("model-detail").textContent = `${model.device} · ${model.lifecycle} · ${model.model_path}`;
+      } catch (error) {
+        byId("model-dot").className = "dot";
+        byId("model-title").textContent = "服务连接失败";
+        byId("model-detail").textContent = error.message;
+      }
+    }
+
+    function element(tag, text, className) {
+      const node = document.createElement(tag);
+      if (text !== undefined) node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    }
+
+    function actionButton(label, className, handler) {
+      const button = element("button", label, `button small ${className || ""}`.trim());
+      button.type = "button";
+      button.addEventListener("click", handler);
+      return button;
+    }
+
+    async function downloadResult(job) {
+      try {
+        const response = await api(`/v1/jobs/${job.id}/result`);
+        const blob = await response.blob();
+        const extension = job.output_format === "yolo" ? "zip" : "json";
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${job.id}-${job.output_format}.${extension}`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) { notify(`下载失败：${error.message}`, true); }
+    }
+
+    async function deleteResult(job) {
+      if (!confirm(`确认删除任务 ${job.id.slice(0, 8)} 的全部结果文件？\n任务记录和上传图片会保留。`)) return;
+      try {
+        await api(`/v1/jobs/${job.id}/result`, { method: "DELETE" });
+        notify("结果文件已删除");
+        await refreshDashboard();
+      } catch (error) { notify(`删除失败：${error.message}`, true); }
+    }
+
+    function renderJobs(data, progresses) {
+      byId("job-summary").textContent = `共 ${data.total} 个任务 · 每 3 秒自动更新`;
+      const host = byId("jobs");
+      host.replaceChildren();
+      if (!data.items.length) {
+        host.append(element("div", "当前筛选条件下没有任务", "empty"));
+        return;
+      }
+      const table = document.createElement("table");
+      const head = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      ["任务", "状态", "图片", "进度", "更新时间", "操作"].forEach((name) => headRow.append(element("th", name)));
+      head.append(headRow);
+      table.append(head);
+      const body = document.createElement("tbody");
+      for (const job of data.items) {
+        const progress = progresses.get(job.id) || { processed_images: 0, total_images: job.image_count, progress_percent: job.status === "succeeded" ? 100 : 0 };
+        const row = document.createElement("tr");
+        const identity = document.createElement("td");
+        identity.append(element("div", job.client_reference || "未命名任务"));
+        identity.append(element("div", job.id.slice(0, 8), "job-id"));
+        row.append(identity);
+        const statusCell = document.createElement("td");
+        statusCell.append(element("span", job.status, `status ${job.status}`));
+        if (job.error) statusCell.title = job.error;
+        row.append(statusCell);
+        row.append(element("td", String(job.image_count)));
+        const progressCell = document.createElement("td");
+        const bar = element("div", undefined, "progress");
+        const fill = document.createElement("span");
+        fill.style.width = `${Math.max(0, Math.min(100, progress.progress_percent))}%`;
+        bar.append(fill);
+        progressCell.append(bar, element("small", `${progress.processed_images}/${progress.total_images} · ${progress.progress_percent}%`, "model-detail"));
+        row.append(progressCell);
+        row.append(element("td", new Date(job.updated_at).toLocaleString()));
+        const actions = element("td", undefined, "actions");
+        if (job.result_url) {
+          actions.append(actionButton("下载", "secondary", () => downloadResult(job)));
+          actions.append(actionButton("删除结果", "danger", () => deleteResult(job)));
+        } else {
+          actions.append(element("span", "—", "model-detail"));
+        }
+        row.append(actions);
+        body.append(row);
+      }
+      table.append(body);
+      host.append(table);
+    }
+
+    async function refreshJobs() {
+      const query = new URLSearchParams({ limit: "100", offset: "0" });
+      const status = byId("status-filter").value;
+      if (status) query.set("status", status);
+      const response = await api(`/v1/jobs?${query}`);
+      const data = await response.json();
+      const entries = await Promise.all(data.items.map(async (job) => {
+        try {
+          const progressResponse = await api(`/v1/jobs/${job.id}/progress`);
+          return [job.id, await progressResponse.json()];
+        } catch (_) { return [job.id, null]; }
+      }));
+      renderJobs(data, new Map(entries));
+    }
+
+    async function refreshDashboard() {
+      if (state.refreshing) return;
+      state.refreshing = true;
+      try { await Promise.all([refreshModel(), refreshJobs()]); }
+      catch (error) { notify(`刷新失败：${error.message}`, true); }
+      finally { state.refreshing = false; }
+    }
+
+    function parsePromptGroups() {
+      const aggregation = byId("aggregation").value;
+      if (byId("task-type").value === "detect" && aggregation === "union") {
+        throw new Error("detect 任务不能使用 union 聚合策略");
+      }
+      const lines = byId("labels").value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      if (!lines.length) throw new Error("请至少填写一个标签和提示词");
+      return lines.map((line, classId) => {
+        const splitAt = line.indexOf("=");
+        if (splitAt < 1) throw new Error(`标签配置格式错误：${line}`);
+        const label = line.slice(0, splitAt).trim();
+        const prompts = line.slice(splitAt + 1).split("|").map((value) => value.trim()).filter(Boolean);
+        if (!label || !prompts.length) throw new Error(`标签配置格式错误：${line}`);
+        return { label, class_id: classId, prompts, aggregation, merge_iou: Number(byId("merge-iou").value) };
+      });
+    }
+
+    function selectedImages() {
+      const candidates = [...byId("files").files, ...byId("directory").files];
+      const unique = new Map();
+      for (const file of candidates) {
+        if (!imagePattern.test(file.name)) continue;
+        unique.set(`${file.webkitRelativePath || file.name}:${file.size}:${file.lastModified}`, file);
+      }
+      return [...unique.values()];
+    }
+
+    async function submitJob(event) {
+      event.preventDefault();
+      const button = byId("submit-job");
+      const notice = byId("submit-notice");
+      button.disabled = true;
+      notice.className = "notice";
+      try {
+        state.apiKey = byId("api-key").value.trim();
+        const files = selectedImages();
+        if (!files.length) throw new Error("请选择至少一张支持的图片");
+        const payload = {
+          task_type: byId("task-type").value,
+          output_format: byId("output-format").value,
+          client_reference: byId("reference").value.trim() || null,
+          prediction: {
+            conf: Number(byId("conf").value), iou: Number(byId("iou").value), imgsz: Number(byId("imgsz").value),
+            max_det: Number(byId("max-det").value), retina_masks: byId("retina").checked
+          },
+          prompt_groups: parsePromptGroups()
+        };
+        notice.textContent = "正在创建任务…";
+        let response = await api("/v1/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const job = await response.json();
+        for (let start = 0; start < files.length; start += 16) {
+          const batch = files.slice(start, start + 16);
+          const form = new FormData();
+          batch.forEach((file) => form.append("files", file, file.name));
+          notice.textContent = `正在上传 ${Math.min(start + batch.length, files.length)}/${files.length}…`;
+          await api(`/v1/jobs/${job.id}/images`, { method: "POST", body: form });
+        }
+        notice.textContent = "正在提交任务…";
+        await api(`/v1/jobs/${job.id}/commit`, { method: "POST" });
+        notice.textContent = `任务 ${job.id.slice(0, 8)} 已进入队列`;
+        byId("files").value = "";
+        byId("directory").value = "";
+        notify("任务提交成功");
+        await refreshDashboard();
+      } catch (error) {
+        notice.textContent = error.message;
+        notice.className = "notice error";
+        notify(`提交失败：${error.message}`, true);
+      } finally { button.disabled = false; }
+    }
+
+    byId("apply-key").addEventListener("click", () => {
+      state.apiKey = byId("api-key").value.trim();
+      notify(state.apiKey ? "API Key 已应用" : "已使用无密钥模式");
+      refreshDashboard();
+    });
+    byId("job-form").addEventListener("submit", submitJob);
+    byId("refresh").addEventListener("click", refreshDashboard);
+    byId("status-filter").addEventListener("change", refreshDashboard);
+    refreshDashboard();
+    setInterval(refreshDashboard, 3000);
+  </script>
+</body>
+</html>

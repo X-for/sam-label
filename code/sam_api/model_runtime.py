@@ -6,7 +6,7 @@ import functools
 import gc
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .config import Settings
 from .postprocess import Candidate, aggregate
@@ -47,11 +47,15 @@ class Sam3Runtime:
         except Exception as exc:
             self._last_error = str(exc)
 
-    async def predict(self, job: JobRecord) -> JobResult:
+    async def predict(
+        self,
+        job: JobRecord,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> JobResult:
         async with self._lock:
             await self._ensure_loaded_locked()
             try:
-                return await self._run_sync(self._predict_sync, job)
+                return await self._run_sync(self._predict_sync, job, progress_callback)
             finally:
                 self._last_used = time.monotonic()
                 if self.settings.lifecycle == "per_job":
@@ -144,7 +148,11 @@ class Sam3Runtime:
         except ImportError:
             pass
 
-    def _predict_sync(self, job: JobRecord) -> JobResult:
+    def _predict_sync(
+        self,
+        job: JobRecord,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> JobResult:
         predictor = self._predictor
         params = job.config.prediction
         for name in ("conf", "iou", "imgsz", "max_det", "retina_masks"):
@@ -152,7 +160,8 @@ class Sam3Runtime:
                 setattr(predictor.args, name, getattr(params, name))
 
         image_results: list[ImageResult] = []
-        for image in job.images:
+        total_images = len(job.images)
+        for processed_images, image in enumerate(job.images, start=1):
             predictor.set_image(image.stored_path)
             group_candidates: list[tuple[Any, list[Candidate]]] = []
             width = height = 0
@@ -184,6 +193,8 @@ class Sam3Runtime:
                     annotations=annotations,
                 )
             )
+            if progress_callback is not None:
+                progress_callback(processed_images, total_images)
 
         return JobResult(
             job_id=job.id,

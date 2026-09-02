@@ -135,6 +135,7 @@ class JobRecord(BaseModel):
     images: list[UploadedImage] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+    processed_images: int = Field(default=0, ge=0)
     error: str | None = None
     result_path: str | None = None
 
@@ -164,6 +165,40 @@ class JobView(BaseModel):
             updated_at=record.updated_at,
             error=record.error,
             result_url=f"/v1/jobs/{record.id}/result" if record.result_path else None,
+        )
+
+
+class JobList(BaseModel):
+    items: list[JobView]
+    total: int
+    limit: int
+    offset: int
+
+
+class JobProgress(BaseModel):
+    id: str
+    status: JobStatus
+    processed_images: int
+    total_images: int
+    progress_percent: float
+    updated_at: datetime
+    error: str | None = None
+
+    @classmethod
+    def from_record(cls, record: JobRecord) -> "JobProgress":
+        total_images = len(record.images)
+        processed_images = min(record.processed_images, total_images)
+        progress_percent = (
+            round(processed_images * 100.0 / total_images, 2) if total_images else 0.0
+        )
+        return cls(
+            id=record.id,
+            status=record.status,
+            processed_images=processed_images,
+            total_images=total_images,
+            progress_percent=progress_percent,
+            updated_at=record.updated_at,
+            error=record.error,
         )
 
 

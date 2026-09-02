@@ -36,7 +36,17 @@ class JobWorker:
             return
         await self.store.set_status(job_id, JobStatus.RUNNING)
         try:
-            result = await self.runtime.predict(job)
+            loop = asyncio.get_running_loop()
+
+            def report_progress(processed_images: int, total_images: int) -> None:
+                if total_images != len(job.images):
+                    raise ValueError("runtime progress total does not match job image count")
+                future = asyncio.run_coroutine_threadsafe(
+                    self.store.set_progress(job_id, processed_images), loop
+                )
+                future.result()
+
+            result = await self.runtime.predict(job, progress_callback=report_progress)
             result_dir = self.store.result_dir / job_id
             path = await asyncio.to_thread(export_result, result, job.config, result_dir)
             await self.store.set_status(job_id, JobStatus.SUCCEEDED, result_path=str(path))

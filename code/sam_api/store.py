@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -46,6 +47,22 @@ class JobStore:
             record = self._jobs.get(job_id)
             return record.model_copy(deep=True) if record else None
 
+    async def list_jobs(
+        self,
+        *,
+        status: JobStatus | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[JobRecord], int]:
+        async with self._lock:
+            records = [
+                record for record in self._jobs.values() if status is None or record.status == status
+            ]
+            records.sort(key=lambda record: (record.created_at, record.id), reverse=True)
+            total = len(records)
+            page = records[offset : offset + limit]
+            return [record.model_copy(deep=True) for record in page], total
+
     async def add_image(self, job_id: str, image: UploadedImage) -> JobRecord:
         async with self._lock:
             record = self._jobs[job_id]
@@ -66,8 +83,31 @@ class JobStore:
             record = self._jobs[job_id]
             record.status = status
             record.error = error
+            if status == JobStatus.SUCCEEDED:
+                record.processed_images = len(record.images)
             if result_path is not None:
                 record.result_path = result_path
+            record.updated_at = utc_now()
+            await self._persist(record)
+            return record.model_copy(deep=True)
+
+    async def set_progress(self, job_id: str, processed_images: int) -> JobRecord:
+        async with self._lock:
+            record = self._jobs[job_id]
+            record.processed_images = min(max(0, processed_images), len(record.images))
+            record.updated_at = utc_now()
+            await self._persist(record)
+            return record.model_copy(deep=True)
+
+    async def delete_result(self, job_id: str) -> JobRecord:
+        async with self._lock:
+            record = self._jobs[job_id]
+            result_root = self.result_dir.resolve()
+            job_result_dir = (self.result_dir / job_id).resolve()
+            if job_result_dir.parent != result_root:
+                raise ValueError("job result directory escapes the configured result root")
+            await asyncio.to_thread(shutil.rmtree, job_result_dir, True)
+            record.result_path = None
             record.updated_at = utc_now()
             await self._persist(record)
             return record.model_copy(deep=True)

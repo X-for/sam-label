@@ -8,13 +8,13 @@ from typing import Annotated, AsyncIterator
 from uuid import uuid4
 
 import aiofiles
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import FileResponse, Response
 from pydantic import ValidationError
 
 from .config import Settings
 from .model_runtime import Sam3Runtime
-from .schemas import JobCreate, JobStatus, JobView, ModelStatus, UploadedImage
+from .schemas import JobCreate, JobList, JobProgress, JobStatus, JobView, ModelStatus, UploadedImage
 from .store import JobStore
 from .worker import JobWorker
 
@@ -158,6 +158,26 @@ async def create_job(payload: JobCreate, request: Request) -> JobView:
     return JobView.from_record(record)
 
 
+@app.get("/v1/jobs", response_model=JobList, dependencies=[Depends(authorize)])
+async def list_jobs(
+    request: Request,
+    job_status: JobStatus | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> JobList:
+    records, total = await services(request).store.list_jobs(
+        status=job_status,
+        limit=limit,
+        offset=offset,
+    )
+    return JobList(
+        items=[JobView.from_record(record) for record in records],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @app.post("/v1/jobs/{job_id}/images", response_model=JobView, dependencies=[Depends(authorize)])
 async def upload_images(
     job_id: str,
@@ -186,14 +206,41 @@ async def get_job(job_id: str, request: Request) -> JobView:
     return JobView.from_record(require_job(await services(request).store.get(job_id)))
 
 
+@app.get(
+    "/v1/jobs/{job_id}/progress",
+    response_model=JobProgress,
+    dependencies=[Depends(authorize)],
+)
+async def get_job_progress(job_id: str, request: Request) -> JobProgress:
+    record = require_job(await services(request).store.get(job_id))
+    return JobProgress.from_record(record)
+
+
 @app.get("/v1/jobs/{job_id}/result", dependencies=[Depends(authorize)])
 async def get_result(job_id: str, request: Request) -> FileResponse:
     record = require_job(await services(request).store.get(job_id))
-    if record.status != JobStatus.SUCCEEDED or not record.result_path:
+    if record.status != JobStatus.SUCCEEDED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="result is not ready")
+    if not record.result_path or not Path(record.result_path).is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="result not found")
     if record.config.output_format.value == "yolo":
         return FileResponse(record.result_path, media_type="application/zip", filename=f"{job_id}-yolo.zip")
     return FileResponse(record.result_path, media_type="application/json", filename=f"{job_id}-coco.json")
+
+
+@app.delete(
+    "/v1/jobs/{job_id}/result",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(authorize)],
+)
+async def delete_result(job_id: str, request: Request) -> Response:
+    svc = services(request)
+    async with svc.job_lock(job_id):
+        record = require_job(await svc.store.get(job_id))
+        if not record.result_path:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="result not found")
+        await svc.store.delete_result(job_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post("/v1/predict", response_model=JobView, status_code=202, dependencies=[Depends(authorize)])

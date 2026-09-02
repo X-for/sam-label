@@ -295,6 +295,23 @@ SAM3 会分别对每个 prompt 推理，然后按照 `aggregation` 合并同一�
 
 ## 直接调用 HTTP API
 
+### 查看任务列表
+
+```bash
+curl "http://127.0.0.1:8000/v1/jobs?status=succeeded&limit=100&offset=0"
+```
+
+`status` 可选值为 `uploading`、`queued`、`running`、`succeeded`、`failed`。结果按创建时间倒序排列；`limit` 默认为 `100`、最大为 `1000`，`offset` 默认为 `0`。
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 100,
+  "offset": 0
+}
+```
+
 ### 1. 创建任务
 
 ```bash
@@ -319,12 +336,37 @@ curl -X POST http://127.0.0.1:8000/v1/jobs/JOB_ID/images \
 curl -X POST http://127.0.0.1:8000/v1/jobs/JOB_ID/commit
 ```
 
-### 4. 查询状态和下载结果
+### 4. 查询状态、进度和下载结果
 
 ```bash
 curl http://127.0.0.1:8000/v1/jobs/JOB_ID
+curl http://127.0.0.1:8000/v1/jobs/JOB_ID/progress
 curl -OJ http://127.0.0.1:8000/v1/jobs/JOB_ID/result
 ```
+
+进度接口按已完成推理的图片数计算，例如：
+
+```json
+{
+  "id": "JOB_ID",
+  "status": "running",
+  "processed_images": 12,
+  "total_images": 20,
+  "progress_percent": 60.0,
+  "updated_at": "2026-09-02T08:00:00Z",
+  "error": null
+}
+```
+
+`uploading` 和 `queued` 阶段的 `processed_images` 为 `0`。每张图片推理完成后进度会持久化更新；`succeeded` 时为 `100.0`。结果导出发生在图片推理完成之后，因此进度达到 `100.0` 时任务状态仍可能短暂保持 `running`，应以 `status` 判断整个任务是否完成。
+
+删除任务结果：
+
+```bash
+curl -X DELETE http://127.0.0.1:8000/v1/jobs/JOB_ID/result
+```
+
+成功返回 `204 No Content`。该操作删除任务结果目录中的 ZIP/JSON、标签和 manifest 等产物，但保留任务记录与上传图片；删除后任务的 `result_url` 为 `null`。任务不存在或结果已经删除时返回 `404`。
 
 任务状态变化：
 

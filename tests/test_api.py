@@ -195,6 +195,169 @@ def test_upload_accepts_multiple_images_without_loading_model(monkeypatch, tmp_p
     assert len(list((tmp_path / "uploads" / job_id).iterdir())) == 2
 
 
+def test_manifest_blocks_commit_until_missing_images_are_uploaded(monkeypatch, tmp_path):
+    monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Sam3Runtime, "prewarm", fake_prewarm)
+    monkeypatch.setattr(Sam3Runtime, "predict", fake_predict)
+    monkeypatch.setattr(Sam3Runtime, "close", fake_close)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/jobs",
+            json={"prompt_groups": [{"label": "car", "prompts": ["car"]}]},
+        )
+        job_id = created.json()["id"]
+        manifest = client.put(
+            f"/v1/jobs/{job_id}/manifest",
+            json={
+                "files": [
+                    {"relative_path": "dataset/first.jpg", "size_bytes": 5},
+                    {"relative_path": "dataset/second.jpg", "size_bytes": 6},
+                ]
+            },
+        )
+        assert manifest.status_code == 200
+        assert manifest.json()["missing_files"] == [
+            "dataset/first.jpg",
+            "dataset/second.jpg",
+        ]
+
+        first = client.post(
+            f"/v1/jobs/{job_id}/images",
+            data={"paths": "dataset/first.jpg"},
+            files=[("files", ("first.jpg", b"first", "image/jpeg"))],
+        )
+        assert first.status_code == 200
+        assert first.json()["image_count"] == 1
+
+        rejected = client.post(f"/v1/jobs/{job_id}/commit")
+        assert rejected.status_code == 409
+        assert rejected.json()["detail"] == {
+            "message": "upload is incomplete",
+            "missing_files": ["dataset/second.jpg"],
+        }
+
+        second = client.post(
+            f"/v1/jobs/{job_id}/images",
+            data={"paths": "dataset/second.jpg"},
+            files=[("files", ("second.jpg", b"second", "image/jpeg"))],
+        )
+        assert second.status_code == 200
+        committed = client.post(f"/v1/jobs/{job_id}/commit")
+        assert committed.status_code == 200
+        assert committed.json()["status"] == "queued"
+
+
+def test_manifest_commit_reports_every_missing_file_before_any_upload(monkeypatch, tmp_path):
+    monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Sam3Runtime, "close", fake_close)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/jobs",
+            json={"prompt_groups": [{"label": "car", "prompts": ["car"]}]},
+        )
+        job_id = created.json()["id"]
+        client.put(
+            f"/v1/jobs/{job_id}/manifest",
+            json={"files": [{"relative_path": "missing.jpg", "size_bytes": 4}]},
+        )
+
+        response = client.post(f"/v1/jobs/{job_id}/commit")
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == {
+            "message": "upload is incomplete",
+            "missing_files": ["missing.jpg"],
+        }
+
+
+def test_manifest_rejects_wrong_size_without_registering_image(monkeypatch, tmp_path):
+    monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Sam3Runtime, "close", fake_close)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/jobs",
+            json={"prompt_groups": [{"label": "car", "prompts": ["car"]}]},
+        )
+        job_id = created.json()["id"]
+        client.put(
+            f"/v1/jobs/{job_id}/manifest",
+            json={"files": [{"relative_path": "bad.jpg", "size_bytes": 10}]},
+        )
+
+        response = client.post(
+            f"/v1/jobs/{job_id}/images",
+            data={"paths": "bad.jpg"},
+            files=[("files", ("bad.jpg", b"short", "image/jpeg"))],
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "uploaded size does not match manifest: bad.jpg"
+        assert client.get(f"/v1/jobs/{job_id}").json()["image_count"] == 0
+        assert list((tmp_path / "uploads" / job_id).glob("*")) == []
+
+
+def test_manifest_upload_is_idempotent_for_retried_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Sam3Runtime, "close", fake_close)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/jobs",
+            json={"prompt_groups": [{"label": "car", "prompts": ["car"]}]},
+        )
+        job_id = created.json()["id"]
+        client.put(
+            f"/v1/jobs/{job_id}/manifest",
+            json={"files": [{"relative_path": "same.jpg", "size_bytes": 4}]},
+        )
+        for _ in range(2):
+            response = client.post(
+                f"/v1/jobs/{job_id}/images",
+                data={"paths": "same.jpg"},
+                files=[("files", ("same.jpg", b"same", "image/jpeg"))],
+            )
+            assert response.status_code == 200
+
+        assert response.json()["image_count"] == 1
+        status = client.get(f"/v1/jobs/{job_id}/manifest")
+        assert status.status_code == 200
+        assert status.json()["missing_files"] == []
+        assert len(list((tmp_path / "uploads" / job_id).glob("*"))) == 1
+
+
+def test_manifest_commit_detects_uploaded_file_removed_from_disk(monkeypatch, tmp_path):
+    monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Sam3Runtime, "prewarm", fake_prewarm)
+    monkeypatch.setattr(Sam3Runtime, "predict", fake_predict)
+    monkeypatch.setattr(Sam3Runtime, "close", fake_close)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/jobs",
+            json={"prompt_groups": [{"label": "car", "prompts": ["car"]}]},
+        )
+        job_id = created.json()["id"]
+        client.put(
+            f"/v1/jobs/{job_id}/manifest",
+            json={"files": [{"relative_path": "lost.jpg", "size_bytes": 4}]},
+        )
+        uploaded = client.post(
+            f"/v1/jobs/{job_id}/images",
+            data={"paths": "lost.jpg"},
+            files=[("files", ("lost.jpg", b"data", "image/jpeg"))],
+        )
+        assert uploaded.status_code == 200
+        next((tmp_path / "uploads" / job_id).iterdir()).unlink()
+
+        response = client.post(f"/v1/jobs/{job_id}/commit")
+
+        assert response.status_code == 409
+        assert response.json()["detail"]["missing_files"] == ["lost.jpg"]
+
+
 def test_list_jobs_supports_status_filter_and_pagination(monkeypatch, tmp_path):
     monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(Sam3Runtime, "close", fake_close)

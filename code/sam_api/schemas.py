@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
+from pathlib import PurePosixPath
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -126,13 +127,52 @@ class UploadedImage(BaseModel):
     stored_path: str
     size_bytes: int
     content_type: str | None = None
+    relative_path: str | None = None
+
+
+class UploadManifestFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    relative_path: str = Field(min_length=1, max_length=1024)
+    size_bytes: int = Field(ge=0)
+    content_type: str | None = None
+
+    @field_validator("relative_path")
+    @classmethod
+    def clean_relative_path(cls, value: str) -> str:
+        value = value.strip().replace("\\", "/")
+        path = PurePosixPath(value)
+        if not value or path.is_absolute() or ".." in path.parts or str(path) == ".":
+            raise ValueError("relative_path must stay inside the selected dataset")
+        return path.as_posix()
+
+
+class UploadManifestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    files: list[UploadManifestFile] = Field(min_length=1, max_length=1_000_000)
+
+    @model_validator(mode="after")
+    def unique_paths(self) -> "UploadManifestCreate":
+        paths = [file.relative_path for file in self.files]
+        if len(paths) != len(set(paths)):
+            raise ValueError("manifest relative_path values must be unique")
+        return self
+
+
+class ExpectedUpload(UploadManifestFile):
+    image_id: str
 
 
 class JobRecord(BaseModel):
     id: str
     status: JobStatus
     config: JobCreate
-    images: list[UploadedImage] = Field(default_factory=list)
+    images: list[UploadedImage] = Field(default_factory=list, exclude=True)
+    image_count: int = Field(default=0, ge=0)
+    uploaded_bytes: int = Field(default=0, ge=0)
+    expected_images: list[ExpectedUpload] = Field(default_factory=list, exclude=True)
+    expected_image_count: int = Field(default=0, ge=0)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     processed_images: int = Field(default=0, ge=0)
@@ -159,8 +199,8 @@ class JobView(BaseModel):
             status=record.status,
             client_reference=record.config.client_reference,
             output_format=record.config.output_format,
-            image_count=len(record.images),
-            uploaded_bytes=sum(image.size_bytes for image in record.images),
+            image_count=record.image_count,
+            uploaded_bytes=record.uploaded_bytes,
             created_at=record.created_at,
             updated_at=record.updated_at,
             error=record.error,
@@ -173,6 +213,12 @@ class JobList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class UploadManifestStatus(BaseModel):
+    expected_image_count: int
+    uploaded_image_count: int
+    missing_files: list[str]
 
 
 class JobProgress(BaseModel):

@@ -2,8 +2,10 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  filesForMissingPaths,
   jobsNeedingProgress,
   terminalProgress,
+  uploadManifest,
   uniqueImageFiles,
 } = require("../code/sam_api/static/ui.js");
 
@@ -49,5 +51,32 @@ test("file and recursive directory selections keep supported images", () => {
   assert.deepEqual(
     uniqueImageFiles([fileImage], [directoryImage, duplicate, ignored]),
     [fileImage, duplicate],
+  );
+});
+
+test("upload manifest preserves directory paths without reading file contents", () => {
+  const files = [
+    { name: "one.jpg", webkitRelativePath: "dataset/a/one.jpg", size: 12 },
+    { name: "two.png", webkitRelativePath: "", size: 34 },
+  ];
+
+  assert.deepEqual(uploadManifest(files), {
+    files: [
+      { relative_path: "dataset/a/one.jpg", size_bytes: 12 },
+      { relative_path: "two.png", size_bytes: 34 },
+    ],
+  });
+});
+
+test("missing upload paths select only files requested by the server", () => {
+  const files = [
+    { name: "one.jpg", webkitRelativePath: "dataset/a/one.jpg", size: 12 },
+    { name: "two.png", webkitRelativePath: "dataset/two.png", size: 34 },
+    { name: "three.jpg", webkitRelativePath: "dataset/three.jpg", size: 56 },
+  ];
+
+  assert.deepEqual(
+    filesForMissingPaths(files, ["dataset/two.png", "dataset/a/one.jpg"]),
+    [files[1], files[0]],
   );
 });

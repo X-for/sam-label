@@ -327,7 +327,55 @@ curl -X POST http://127.0.0.1:8000/v1/jobs \
 
 返回结果中包含任务 `id`。
 
-### 2. 上传图片
+### 2. 登记上传清单（推荐）
+
+大数据集上传前先登记相对路径和文件大小。服务端利用清单识别漏传、断点文件和大小不一致，不会在这个阶段读取图片内容或计算哈希。
+
+```bash
+curl -X PUT http://127.0.0.1:8000/v1/jobs/JOB_ID/manifest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "files": [
+      {"relative_path": "dataset/a/example-a.jpg", "size_bytes": 12345},
+      {"relative_path": "dataset/b/example-b.jpg", "size_bytes": 67890}
+    ]
+  }'
+```
+
+返回预期数量、已完整接收数量和缺失路径：
+
+```json
+{
+  "expected_image_count": 2,
+  "uploaded_image_count": 0,
+  "missing_files": [
+    "dataset/a/example-a.jpg",
+    "dataset/b/example-b.jpg"
+  ]
+}
+```
+
+可随时查询缺失项：
+
+```bash
+curl http://127.0.0.1:8000/v1/jobs/JOB_ID/manifest
+```
+
+### 3. 上传图片
+
+使用清单时，每个 `paths` 必须与紧随其后的 `files` 一一对应：
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/jobs/JOB_ID/images \
+  -F "paths=dataset/a/example-a.jpg" \
+  -F "files=@example-a.jpg" \
+  -F "paths=dataset/b/example-b.jpg" \
+  -F "files=@example-b.jpg"
+```
+
+服务端先写入 `.part` 临时文件，完整接收且字节数与清单一致后才确认成功。重复上传相同路径是幂等操作；服务重启后会清理未完成的 `.part` 文件，并恢复已完整落盘但尚未来得及写入确认记录的图片。
+
+旧客户端仍可不登记清单，直接上传：
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/jobs/JOB_ID/images \
@@ -335,13 +383,28 @@ curl -X POST http://127.0.0.1:8000/v1/jobs/JOB_ID/images \
   -F "files=@example-b.jpg"
 ```
 
-### 3. 提交任务
+兼容模式只能保证服务端收到的文件写入完整，无法判断客户端是否从原始目录中漏发了图片。
+
+### 4. 提交任务
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/jobs/JOB_ID/commit
 ```
 
-### 4. 查询状态、进度和下载结果
+存在缺失文件、磁盘文件丢失或大小不一致时，提交返回 `409 Conflict`，任务继续保持 `uploading`：
+
+```json
+{
+  "detail": {
+    "message": "upload is incomplete",
+    "missing_files": ["dataset/b/example-b.jpg"]
+  }
+}
+```
+
+只需补传 `missing_files` 中的图片，再次提交即可。
+
+### 5. 查询状态、进度和下载结果
 
 ```bash
 curl http://127.0.0.1:8000/v1/jobs/JOB_ID
@@ -380,7 +443,7 @@ uploading → queued → running → succeeded
                               └→ failed
 ```
 
-也可以使用 `POST /v1/predict` 一次性提交少量图片和任务 JSON。大数据集建议使用分步任务接口，上传失败时更容易定位和重试。
+也可以使用 `POST /v1/predict` 一次性提交少量图片和任务 JSON。大数据集建议使用清单加分步任务接口，上传失败时服务端能返回准确的补传列表。服务端自带的 `/ui` 页面已经自动使用清单、分批上传和缺失图片补传，无需单独下载客户端。
 
 如果配置了 API key，需要为 curl 增加：
 

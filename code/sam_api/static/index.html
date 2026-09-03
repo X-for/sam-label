@@ -207,9 +207,12 @@
         let detail = `${response.status} ${response.statusText}`;
         try {
           const payload = await response.json();
-          detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail || payload);
+          detail = payload.detail || payload;
         } catch (_) {}
-        throw new Error(detail);
+        const error = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        error.status = response.status;
+        error.detail = detail;
+        throw error;
       }
       if (response.status === 204) return null;
       return response;
@@ -378,6 +381,48 @@
       return SamUi.uniqueImageFiles(byId("files").files, byId("directory").files);
     }
 
+    async function uploadBatch(jobId, batch) {
+      const form = new FormData();
+      batch.forEach((file) => {
+        form.append("paths", file.webkitRelativePath || file.name);
+        form.append("files", file, file.name);
+      });
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          await api(`/v1/jobs/${jobId}/images`, { method: "POST", body: form });
+          return;
+        } catch (error) {
+          if (attempt === 3 || (error.status && error.status < 500)) throw error;
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+
+    async function uploadFiles(jobId, files, total, notice, prefix = "正在上传") {
+      for (let start = 0; start < files.length; start += 16) {
+        const batch = files.slice(start, start + 16);
+        notice.textContent = `${prefix} ${Math.min(start + batch.length, files.length)}/${files.length}（总计 ${total}）…`;
+        await uploadBatch(jobId, batch);
+      }
+    }
+
+    async function commitWithMissingRetry(jobId, files, notice) {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          await api(`/v1/jobs/${jobId}/commit`, { method: "POST" });
+          return;
+        } catch (error) {
+          const missingPaths = error.detail && error.detail.missing_files;
+          if (error.status !== 409 || !Array.isArray(missingPaths) || attempt === 3) throw error;
+          const missingFiles = SamUi.filesForMissingPaths(files, missingPaths);
+          if (missingFiles.length !== missingPaths.length) {
+            throw new Error(`服务端发现 ${missingPaths.length} 张缺失图片，但浏览器已无法读取全部原文件`);
+          }
+          await uploadFiles(jobId, missingFiles, files.length, notice, "正在补传");
+        }
+      }
+    }
+
     async function submitJob(event) {
       event.preventDefault();
       const button = byId("submit-job");
@@ -401,15 +446,15 @@
         notice.textContent = "正在创建任务…";
         let response = await api("/v1/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         const job = await response.json();
-        for (let start = 0; start < files.length; start += 16) {
-          const batch = files.slice(start, start + 16);
-          const form = new FormData();
-          batch.forEach((file) => form.append("files", file, file.name));
-          notice.textContent = `正在上传 ${Math.min(start + batch.length, files.length)}/${files.length}…`;
-          await api(`/v1/jobs/${job.id}/images`, { method: "POST", body: form });
-        }
+        notice.textContent = "正在登记上传清单…";
+        await api(`/v1/jobs/${job.id}/manifest`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(SamUi.uploadManifest(files)),
+        });
+        await uploadFiles(job.id, files, files.length, notice);
         notice.textContent = "正在提交任务…";
-        await api(`/v1/jobs/${job.id}/commit`, { method: "POST" });
+        await commitWithMissingRetry(job.id, files, notice);
         notice.textContent = `任务 ${job.id.slice(0, 8)} 已进入队列`;
         byId("files").value = "";
         byId("directory").value = "";

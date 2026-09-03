@@ -8,3 +8,6 @@ data/
 models/
 datasets/
 results/
+
+# Local client task configuration
+client/my-task.toml

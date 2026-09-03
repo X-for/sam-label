@@ -36,5 +36,28 @@
     return [...unique.values()];
   }
 
-  return { jobsNeedingProgress, newestFirst, terminalProgress, uniqueImageFiles };
+  function uploadManifest(files) {
+    return {
+      files: files.map((file) => ({
+        relative_path: file.webkitRelativePath || file.name,
+        size_bytes: file.size,
+      })),
+    };
+  }
+
+  function filesForMissingPaths(files, missingPaths) {
+    const byPath = new Map(
+      files.map((file) => [file.webkitRelativePath || file.name, file]),
+    );
+    return missingPaths.map((path) => byPath.get(path)).filter(Boolean);
+  }
+
+  return {
+    filesForMissingPaths,
+    jobsNeedingProgress,
+    newestFirst,
+    terminalProgress,
+    uniqueImageFiles,
+    uploadManifest,
+  };
 });

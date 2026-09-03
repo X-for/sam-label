@@ -31,7 +31,7 @@
     }
     button, input, select, textarea { font: inherit; }
     button { cursor: pointer; }
-    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 64px; }
+    .shell { width: min(1680px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 64px; }
     header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 24px; }
     h1 { margin: 0; font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -.04em; }
     h1 span { color: var(--brand); }
@@ -41,7 +41,7 @@
     .model-detail { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
     .dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: #9aa79f; }
     .dot.online { background: #19a66c; box-shadow: 0 0 0 4px rgba(25,166,108,.13); }
-    .grid { display: grid; grid-template-columns: minmax(300px, 390px) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .grid { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); gap: 20px; align-items: start; }
     .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
     .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
     .panel-head h2 { margin: 0; font-size: 18px; }
@@ -71,7 +71,7 @@
     .toolbar { display: flex; align-items: center; gap: 9px; }
     .toolbar select { width: auto; min-width: 126px; padding: 7px 9px; }
     .table-wrap { overflow-x: auto; padding: 14px 0 4px; }
-    table { width: 100%; border-collapse: collapse; min-width: 690px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 780px; }
     th, td { padding: 12px 14px; border-top: 1px solid var(--line); text-align: left; vertical-align: middle; }
     th { color: var(--muted); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
     td { font-size: 13px; }
@@ -80,7 +80,13 @@
     .status.running, .status.queued { color: var(--warning); background: #fff6de; }
     .status.succeeded { color: var(--brand-dark); background: var(--soft); }
     .status.failed { color: var(--danger); background: #fff0f0; }
-    .progress { width: 120px; height: 7px; overflow: hidden; border-radius: 99px; background: #e5ebe7; margin-bottom: 4px; }
+    th:nth-child(2) { width: 108px; }
+    th:nth-child(3) { width: 64px; }
+    th:nth-child(4) { width: 165px; }
+    th:nth-child(5) { width: 155px; }
+    th:nth-child(6) { width: 150px; }
+    .task-cell { overflow-wrap: anywhere; }
+    .progress { width: 100%; max-width: 145px; height: 7px; overflow: hidden; border-radius: 99px; background: #e5ebe7; margin-bottom: 4px; }
     .progress span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
     .empty { padding: 48px 20px; color: var(--muted); text-align: center; }
     .notice { min-height: 22px; margin-top: 12px; font-size: 13px; color: var(--muted); }
@@ -90,10 +96,21 @@
     #toast { position: fixed; right: 20px; bottom: 20px; max-width: min(420px, calc(100% - 40px)); padding: 12px 16px; border-radius: 11px; color: white; background: #26352d; box-shadow: var(--shadow); opacity: 0; transform: translateY(12px); pointer-events: none; transition: .2s; }
     #toast.show { opacity: 1; transform: translateY(0); }
     #toast.error { background: var(--danger); }
-    @media (max-width: 850px) {
+    @media (max-width: 1100px) {
       header { flex-direction: column; }
       .model-card { width: 100%; }
       .grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 700px) {
+      .table-wrap { overflow: visible; padding: 12px; }
+      table, tbody, tr, td { display: block; width: 100%; min-width: 0; }
+      thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      tbody { display: grid; gap: 12px; }
+      tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; padding: 15px; border: 1px solid var(--line); border-radius: 12px; }
+      tbody td { padding: 0; border: 0; min-width: 0; }
+      tbody td::before { content: attr(data-label); display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+      tbody td:first-child, tbody td:nth-child(4), tbody td:last-child { grid-column: 1 / -1; }
+      .progress { max-width: none; }
     }
     @media (max-width: 520px) {
       .shell { width: min(100% - 20px, 1180px); padding-top: 22px; }
@@ -168,9 +185,10 @@
   </main>
   <div id="toast" role="status" aria-live="polite"></div>
 
+  <script src="/ui.js"></script>
   <script>
-    const state = { apiKey: "", refreshing: false };
-    const imagePattern = /\.(jpe?g|png|webp|bmp|tiff?)$/i;
+    const state = { apiKey: "", refreshing: false, refreshTimer: null };
+    const refreshIntervalMs = 60_000;
     const byId = (id) => document.getElementById(id);
 
     function notify(message, error = false) {
@@ -249,7 +267,7 @@
     }
 
     function renderJobs(data, progresses) {
-      byId("job-summary").textContent = `共 ${data.total} 个任务 · 每 3 秒自动更新`;
+      byId("job-summary").textContent = `共 ${data.total} 个任务 · 每 60 秒更新 · 仅查询进行中任务的进度`;
       const host = byId("jobs");
       host.replaceChildren();
       if (!data.items.length) {
@@ -263,27 +281,36 @@
       head.append(headRow);
       table.append(head);
       const body = document.createElement("tbody");
-      for (const job of data.items) {
-        const progress = progresses.get(job.id) || { processed_images: 0, total_images: job.image_count, progress_percent: job.status === "succeeded" ? 100 : 0 };
+      for (const job of SamUi.newestFirst(data.items)) {
+        const progress = progresses.get(job.id) || SamUi.terminalProgress(job) || { processed_images: 0, total_images: job.image_count, progress_percent: 0 };
         const row = document.createElement("tr");
         const identity = document.createElement("td");
+        identity.className = "task-cell";
+        identity.dataset.label = "任务";
         identity.append(element("div", job.client_reference || "未命名任务"));
         identity.append(element("div", job.id.slice(0, 8), "job-id"));
         row.append(identity);
         const statusCell = document.createElement("td");
+        statusCell.dataset.label = "状态";
         statusCell.append(element("span", job.status, `status ${job.status}`));
         if (job.error) statusCell.title = job.error;
         row.append(statusCell);
-        row.append(element("td", String(job.image_count)));
+        const imageCell = element("td", String(job.image_count));
+        imageCell.dataset.label = "图片";
+        row.append(imageCell);
         const progressCell = document.createElement("td");
+        progressCell.dataset.label = "进度";
         const bar = element("div", undefined, "progress");
         const fill = document.createElement("span");
         fill.style.width = `${Math.max(0, Math.min(100, progress.progress_percent))}%`;
         bar.append(fill);
         progressCell.append(bar, element("small", `${progress.processed_images}/${progress.total_images} · ${progress.progress_percent}%`, "model-detail"));
         row.append(progressCell);
-        row.append(element("td", new Date(job.updated_at).toLocaleString()));
+        const updatedCell = element("td", new Date(job.updated_at).toLocaleString());
+        updatedCell.dataset.label = "更新时间";
+        row.append(updatedCell);
         const actions = element("td", undefined, "actions");
+        actions.dataset.label = "操作";
         if (job.result_url) {
           actions.append(actionButton("下载", "secondary", () => downloadResult(job)));
           actions.append(actionButton("删除结果", "danger", () => deleteResult(job)));
@@ -303,12 +330,14 @@
       if (status) query.set("status", status);
       const response = await api(`/v1/jobs?${query}`);
       const data = await response.json();
-      const entries = await Promise.all(data.items.map(async (job) => {
+      data.items = SamUi.newestFirst(data.items);
+      const entries = data.items.map((job) => [job.id, SamUi.terminalProgress(job)]);
+      for (const job of SamUi.jobsNeedingProgress(data.items)) {
         try {
           const progressResponse = await api(`/v1/jobs/${job.id}/progress`);
-          return [job.id, await progressResponse.json()];
-        } catch (_) { return [job.id, null]; }
-      }));
+          entries.push([job.id, await progressResponse.json()]);
+        } catch (_) {}
+      }
       renderJobs(data, new Map(entries));
     }
 
@@ -318,6 +347,14 @@
       try { await Promise.all([refreshModel(), refreshJobs()]); }
       catch (error) { notify(`刷新失败：${error.message}`, true); }
       finally { state.refreshing = false; }
+    }
+
+    function scheduleRefresh() {
+      clearTimeout(state.refreshTimer);
+      state.refreshTimer = setTimeout(async () => {
+        if (!document.hidden) await refreshDashboard();
+        scheduleRefresh();
+      }, refreshIntervalMs);
     }
 
     function parsePromptGroups() {
@@ -338,13 +375,7 @@
     }
 
     function selectedImages() {
-      const candidates = [...byId("files").files, ...byId("directory").files];
-      const unique = new Map();
-      for (const file of candidates) {
-        if (!imagePattern.test(file.name)) continue;
-        unique.set(`${file.webkitRelativePath || file.name}:${file.size}:${file.lastModified}`, file);
-      }
-      return [...unique.values()];
+      return SamUi.uniqueImageFiles(byId("files").files, byId("directory").files);
     }
 
     async function submitJob(event) {
@@ -399,8 +430,11 @@
     byId("job-form").addEventListener("submit", submitJob);
     byId("refresh").addEventListener("click", refreshDashboard);
     byId("status-filter").addEventListener("change", refreshDashboard);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshDashboard();
+    });
     refreshDashboard();
-    setInterval(refreshDashboard, 3000);
+    scheduleRefresh();
   </script>
 </body>
 </html>

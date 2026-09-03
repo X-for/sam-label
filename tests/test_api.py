@@ -61,12 +61,17 @@ def test_web_ui_is_served(monkeypatch, tmp_path):
 
     with TestClient(app) as client:
         response = client.get("/ui")
+        script = client.get("/ui.js")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "SAM3 预标注控制台" in response.text
     assert "/v1/jobs" in response.text
     assert "/progress" in response.text
+
+    assert script.status_code == 200
+    assert script.headers["content-type"].startswith("text/javascript")
+    assert "jobsNeedingProgress" in script.text
 
 
 def test_create_upload_commit_and_download_coco(monkeypatch, tmp_path):
@@ -164,6 +169,30 @@ def test_job_progress_not_found(monkeypatch, tmp_path):
         response = client.get("/v1/jobs/missing/progress")
 
     assert response.status_code == 404
+
+
+def test_upload_accepts_multiple_images_without_loading_model(monkeypatch, tmp_path):
+    monkeypatch.setenv("SAM3_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(Sam3Runtime, "prewarm", fake_prewarm)
+    monkeypatch.setattr(Sam3Runtime, "close", fake_close)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/jobs",
+            json={"prompt_groups": [{"label": "car", "prompts": ["car"]}]},
+        )
+        job_id = created.json()["id"]
+        uploaded = client.post(
+            f"/v1/jobs/{job_id}/images",
+            files=[
+                ("files", ("first.jpg", b"first-image", "image/jpeg")),
+                ("files", ("second.png", b"second-image", "image/png")),
+            ],
+        )
+
+    assert uploaded.status_code == 200
+    assert uploaded.json()["image_count"] == 2
+    assert len(list((tmp_path / "uploads" / job_id).iterdir())) == 2
 
 
 def test_list_jobs_supports_status_filter_and_pagination(monkeypatch, tmp_path):

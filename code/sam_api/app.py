@@ -20,6 +20,7 @@ from .worker import JobWorker
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp", "image/tiff"}
 UI_PATH = Path(__file__).with_name("static") / "index.html"
+UI_SCRIPT_PATH = Path(__file__).with_name("static") / "ui.js"
 
 
 class Services:
@@ -94,6 +95,11 @@ def require_job(record):
 @app.get("/ui", include_in_schema=False)
 async def web_ui() -> FileResponse:
     return FileResponse(UI_PATH, media_type="text/html")
+
+
+@app.get("/ui.js", include_in_schema=False)
+async def web_ui_script() -> FileResponse:
+    return FileResponse(UI_SCRIPT_PATH, media_type="text/javascript")
 
 
 async def save_uploads(job_id: str, files: list[UploadFile], svc: Services) -> JobView:

@@ -187,10 +187,14 @@ class JobProgress(BaseModel):
     @classmethod
     def from_record(cls, record: JobRecord) -> "JobProgress":
         total_images = len(record.images)
-        processed_images = min(record.processed_images, total_images)
-        progress_percent = (
-            round(processed_images * 100.0 / total_images, 2) if total_images else 0.0
-        )
+        if record.status == JobStatus.SUCCEEDED:
+            processed_images = total_images
+            progress_percent = 100.0
+        else:
+            processed_images = min(record.processed_images, total_images)
+            progress_percent = (
+                round(processed_images * 100.0 / total_images, 2) if total_images else 0.0
+            )
         return cls(
             id=record.id,
             status=record.status,

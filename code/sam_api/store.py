@@ -32,6 +32,11 @@ class JobStore:
             if record.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
                 record.status = JobStatus.FAILED
                 record.error = "service restarted before this job completed"
+            elif record.status == JobStatus.SUCCEEDED:
+                # Progress tracking was added after some completed jobs had
+                # already been persisted. Keep the durable record consistent
+                # with the terminal status when those jobs are loaded.
+                record.processed_images = len(record.images)
             self._jobs[record.id] = record
             await self._persist(record)
 
